@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>育儿知识库 · 智能问答</title>
+    <style>
+        :root {
+            --brand: #2f7aed;
+            --brand-dark: #1f5fc0;
+            --ok: #22a06b;
+            --err: #d64545;
+            --line: #e6eaee;
+            --text: #2c3e50;
+            --muted: #8a99a8;
+            --bg: #f4f6f9;
+        }
+        * { box-sizing: border-box; }
+        html, body { height: 100%; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Tahoma, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            justify-content: center;
+        }
+        .app {
+            width: 100%;
+            max-width: 940px;
+            height: 100%;
+            background: #fff;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 0 26px rgba(0, 0, 0, .06);
+        }
+
+        /* ---------- 顶部 ---------- */
+        .header {
+            padding: 13px 22px;
+            border-bottom: 1px solid var(--line);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+        }
+        .header h1 { margin: 0; font-size: 16px; }
+        .header .sub { font-size: 11.5px; color: var(--muted); margin-top: 2px; }
+        .header-actions { display: flex; align-items: center; gap: 8px; }
+        .header-actions button {
+            font-family: inherit;
+            font-size: 12px;
+            padding: 5px 11px;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: #5a6b7b;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .header-actions button:hover { background: #f4f7fa; }
+        .sid {
+            font-size: 11px;
+            color: var(--muted);
+            cursor: pointer;
+            border-bottom: 1px dashed #ccd6df;
+        }
+        .sid:hover { color: var(--brand); }
+
+        /* ---------- 消息区 ---------- */
+        .messages { flex: 1; overflow-y: auto; padding: 20px 22px 8px; }
+        .msg { display: flex; margin-bottom: 18px; }
+        .msg .avatar {
+            width: 30px; height: 30px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 12px; color: #fff; flex-shrink: 0;
+            user-select: none;
+        }
+        .msg.user { flex-direction: row-reverse; }
+        .msg.user .avatar { background: var(--brand); }
+        .msg.assistant .avatar { background: var(--ok); }
+        .bubble-wrap { max-width: 80%; margin: 0 10px; min-width: 0; }
+        .msg.user .bubble-wrap { display: flex; flex-direction: column; align-items: flex-end; }
+        .bubble {
+            padding: 10px 14px;
+            border-radius: 10px;
+            font-size: 14px;
+            line-height: 1.78;
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .msg.user .bubble { background: #eaf4fd; color: #22405c; white-space: pre-wrap; }
+        .msg.assistant .bubble { background: #f7f9fb; color: var(--text); }
+        .bubble h4 {
+            margin: 14px 0 5px;
+            font-size: 13.5px;
+            color: var(--brand-dark);
+            display: flex; align-items: center; gap: 6px;
+        }
+        .bubble h4:first-child { margin-top: 0; }
+        .bubble ul, .bubble ol { margin: 5px 0 5px 20px; padding: 0; }
+        .bubble li { margin: 3px 0; }
+        .bubble blockquote {
+            margin: 7px 0; padding: 6px 12px;
+            border-left: 3px solid #cfe0f7; background: #f2f7fe;
+            color: #45596d; border-radius: 0 6px 6px 0;
+        }
+        .bubble hr { border: none; border-top: 1px solid var(--line); margin: 12px 0; }
+        .bubble strong { color: #1f3d5c; }
+        /* 话术高亮：把带引号的整行做得像可复制的卡片 */
+        .bubble .phrase {
+            display: block; margin: 5px 0; padding: 7px 12px;
+            background: #fff; border: 1px solid #e2ecf8; border-radius: 7px;
+            color: #1f3d5c;
+        }
+
+        /* 光标 */
+        .cursor {
+            display: inline-block; width: 7px; height: 15px;
+            background: var(--brand); vertical-align: -2px; margin-left: 2px;
+            animation: blink .9s steps(1) infinite;
+        }
+        @keyframes blink { 50% { opacity: 0; } }
+
+        /* 来源区块 */
+        .sources {
+            margin-top: 12px; padding-top: 10px;
+            border-top: 1px dashed #dde5ec;
+            font-size: 12.5px; color: #5c6b7a;
+        }
+        .sources .title { font-weight: 600; margin-bottom: 5px; color: #45596d; }
+        .sources .item {
+            display: block; padding: 3px 0 3px 14px; position: relative;
+        }
+        .sources .item::before {
+            content: ''; position: absolute; left: 2px; top: 11px;
+            width: 5px; height: 5px; border-radius: 50%; background: #9dc0ee;
+        }
+
+        /* 消息操作条 */
+        .msg-actions {
+            display: flex; gap: 8px; margin-top: 7px;
+            opacity: 0; transition: opacity .18s;
+        }
+        .msg:hover .msg-actions { opacity: 1; }
+        .msg-actions button {
+            font-family: inherit; font-size: 11.5px;
+            padding: 3px 9px; border: 1px solid var(--line);
+            background: #fff; color: var(--muted);
+            border-radius: 10px; cursor: pointer;
+        }
+        .msg-actions button:hover { color: var(--brand); border-color: #bcd4f6; }
+
+        /* ---------- 进度区 ---------- */
+        .progress {
+            padding: 0 22px;
+            font-size: 12px; color: var(--muted);
+            min-height: 0;
+        }
+        .progress:not(:empty) { padding-bottom: 8px; }
+        .steps { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+        .step {
+            font-size: 11.5px; padding: 2px 8px; border-radius: 10px;
+            background: #f2f5f8; color: #93a1ae;
+        }
+        .step.done { background: #e6f6ef; color: var(--ok); }
+        .step.running {
+            background: #e7f0ff; color: var(--brand); font-weight: 600;
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+        .progress .slow-tip { margin-top: 5px; color: #b0873a; }
+
+        /* ---------- 输入区 ---------- */
+        .tips {
+            padding: 0 22px 6px; display: flex; flex-wrap: wrap; gap: 6px;
+        }
+        .tips span {
+            font-size: 12px; padding: 4px 10px; border-radius: 12px;
+            background: #f4f7fa; color: #6b7c8c; cursor: pointer;
+            border: 1px solid transparent;
+        }
+        .tips span:hover { background: #eaf4fd; border-color: #cfe0f7; color: var(--brand-dark); }
+
+        .composer {
+            border-top: 1px solid var(--line);
+            padding: 11px 22px 16px;
+            display: flex; gap: 10px; align-items: flex-end;
+        }
+        .composer textarea {
+            flex: 1; resize: none; height: 46px; max-height: 160px;
+            padding: 12px 14px; border: 1px solid var(--line);
+            border-radius: 9px; font-size: 14px; line-height: 1.5;
+            font-family: inherit; outline: none; transition: border-color .15s;
+        }
+        .composer textarea:focus { border-color: var(--brand); }
+        .composer button {
+            width: 88px; height: 46px; border: none; border-radius: 9px;
+            background: var(--brand); color: #fff; font-size: 14px;
+            cursor: pointer; font-family: inherit; flex-shrink: 0;
+            transition: background .15s;
+        }
+        .composer button:hover:not(:disabled) { background: var(--brand-dark); }
+        .composer button:disabled { background: #c6d0da; cursor: not-allowed; }
+        .composer button.stop { background: var(--err); }
+
+        /* ---------- 欢迎页 ---------- */
+        .welcome { text-align: center; padding: 48px 20px 20px; color: var(--muted); }
+        .welcome .big { font-size: 34px; margin-bottom: 10px; }
+        .welcome .t { font-size: 15px; color: #45596d; margin-bottom: 6px; }
+        .welcome .d { font-size: 12.5px; line-height: 1.9; }
+
+        /* 回到最新 */
+        .to-bottom {
+            position: absolute; right: 26px; bottom: 130px;
+            width: 36px; height: 36px; border-radius: 50%;
+            border: 1px solid var(--line); background: #fff; color: var(--brand);
+            box-shadow: 0 3px 10px rgba(0,0,0,.1); cursor: pointer;
+            display: none; align-items: center; justify-content: center; font-size: 15px;
+        }
+        .to-bottom.show { display: flex; }
+        .app { position: relative; }
+    </style>
+</head>
+<body>
+
+<div class="app">
+    <div class="header">
+        <div>
+            <h1>育儿知识库 · 智能问答</h1>
+            <div class="sub">育儿建议 · 专家建议 · 亲子案例 · 沟通话术 · 知识科普</div>
+        </div>
+        <div class="header-actions">
+            <span class="sid" id="sidText" title="点击复制会话ID">会话ID</span>
+            <button id="btnClear">清空会话</button>
+        </div>
+    </div>
+
+    <div class="messages" id="messages"></div>
+    <div class="progress" id="progress"></div>
+
+    <div class="tips" id="tips"></div>
+
+    <div class="composer">
+        <textarea id="input"
+                  placeholder="描述您遇到的育儿问题，例如：3-6岁孩子发脾气躺地上怎么办？（Enter 发送 / Shift+Enter 换行）"></textarea>
+        <button id="sendBtn">发送</button>
+    </div>
+
+    <button class="to-bottom" id="toBottom" title="回到最新">&#8595;</button>
+</div>
+
+<script>
+    const API_BASE = 'http://127.0.0.1:8001';
+
+    // 查询流水线的节点顺序（中文名，与后端 task_utils 的映射一致）
+    const QUERY_STEPS = [
+        '解析检索条件', '切片检索', '切片检索(HyDE)',
+        '多路结果融合', '结果精排', '生成答案'
+    ];
+
+    const SAMPLE_QUESTIONS = [
+        '3-6岁孩子情绪管理有什么好方法',
+        '我家娃在商场躺地上大哭怎么办',
+        '有没有入园分离焦虑的案例',
+        '如何培养孩子的专注力',
+        '12岁以上孩子深夜刷手机怎么管'
+    ];
+
+    const el = {
+        messages: document.getElementById('messages'),
+        progress: document.getElementById('progress'),
+        input: document.getElementById('input'),
+        sendBtn: document.getElementById('sendBtn'),
+        sidText: document.getElementById('sidText'),
+        btnClear: document.getElementById('btnClear'),
+        tips: document.getElementById('tips'),
+        toBottom: document.getElementById('toBottom'),
+    };
+
+    // ---------- 会话ID：同一浏览器持久复用，便于复现问题 ----------
+    let sessionId = localStorage.getItem('parenting_session_id');
+    if (!sessionId) {
+        sessionId = 'web-' + Math.random().toString(36).slice(2, 12);
+        localStorage.setItem('parenting_session_id', sessionId);
+    }
+    el.sidText.textContent = '会话ID ' + sessionId.slice(0, 10) + '…';
+    el.sidText.title = '点击复制会话ID：' + sessionId;
+
+    let eventSource = null;
+    let generating = false;
+    let lastQuestion = '';
+    let slowTipTimer = null;
+    let watchdogTimer = null;
+    let stickToBottom = true;
+
+    // ============================ 工具函数 ============================
+    function escapeHtml(t) {
+        return String(t)
+            .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    }
+
+    /**
+     * 把答案末尾的【来源】区块拆出来单独渲染
+     * 返回 { body, sources: [] }
+     */
+    function splitAnswer(text) {
+        const idx = text.lastIndexOf('【来源】');
+        if (idx === -1) return { body: text, sources: [] };
+
+        const body = text.slice(0, idx).trimEnd();
+        const tail = text.slice(idx + 4);
+        const sources = tail.split('\n')
+            .map(l => l.trim())
+            .filter(l => l.startsWith('-') || l.startsWith('*'))
+            .map(l => l.replace(/^[-*]\s*/, ''))
+            .filter(Boolean);
+
+        return { body, sources };
+    }
+
+    /** 轻量 Markdown 渲染（先转义，再做结构替换） */
+    function renderMarkdown(text) {
+        let html = escapeHtml(text);
+
+        // 标题
+        html = html.replace(/^#{1,6}\s*(.+)$/gm, '<h4>$1</h4>');
+        // 分隔线
+        html = html.replace(/^\s*---+\s*$/gm, '<hr>');
+        // 引用
+        html = html.replace(/^&gt;\s?(.+)$/gm, '<blockquote>$1</blockquote>');
+        // 加粗
+        html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+
+        // 无序列表（把连续的 - / * 行包成 <ul>）
+        html = html.replace(/(?:^|\n)((?:[-*]\s+.+\n?)+)/g, (m, block) => {
+            const items = block.trim().split('\n')
+                .map(line => '<li>' + line.replace(/^[-*]\s+/, '') + '</li>').join('');
+            return '\n<ul>' + items + '</ul>';
+        });
+
+        // 有序列表（同上）
+        html = html.replace(/(?:^|\n)((?:\d+[.)]\s+.+\n?)+)/g, (m, block) => {
+            const items = block.trim().split('\n')
+                .map(line => '<li>' + line.replace(/^\d+[.)]\s+/, '') + '</li>').join('');
+            return '\n<ol>' + items + '</ol>';
+        });
+
+        // 中文引号包裹的整行 → 话术卡片（家长能直接照念）
+        html = html.replace(/^[“"](.+)["”]\s*$/gm, '<span class="phrase">“$1”</span>');
+
+        return html;
+    }
+
+    function renderAssistant(bubble, rawText) {
+        const { body, sources } = splitAnswer(rawText);
+        let html = renderMarkdown(body);
+
+        if (sources.length) {
+            html += '<div class="sources"><div class="title">参考来源</div>' +
+                sources.map(s => `<span class="item">${escapeHtml(s)}</span>`).join('') +
+                '</div>';
+        }
+        bubble.innerHTML = html;
+    }
+
+    // ============================ 消息渲染 ============================
+    function appendMessage(role, text, isPlaceholder) {
+        const wrap = document.createElement('div');
+        wrap.className = 'msg ' + role;
+
+        const avatar = document.createElement('div');
+        avatar.className = 'avatar';
+        avatar.textContent = role === 'user' ? '我' : 'AI';
+
+        const bubbleWrap = document.createElement('div');
+        bubbleWrap.className = 'bubble-wrap';
+
+        const bubble = document.createElement('div');
+        bubble.className = 'bubble';
+
+        if (role === 'assistant') {
+            if (isPlaceholder) bubble.innerHTML = '<span class="cursor"></span>';
+            else renderAssistant(bubble, text);
+        } else {
+            bubble.textContent = text;
+        }
+
+        bubbleWrap.appendChild(bubble);
+
+        // 助手消息的操作条：复制 / 重新生成
+        if (role === 'assistant' && !isPlaceholder) {
+            const actions = document.createElement('div');
+            actions.className = 'msg-actions';
+
+            const btnCopy = document.createElement('button');
+            btnCopy.textContent = '复制';
+            btnCopy.onclick = () => {
+                navigator.clipboard.writeText(bubble.innerText)
+                    .then(() => { btnCopy.textContent = '已复制'; setTimeout(() => btnCopy.textContent = '复制', 1500); })
+                    .catch(() => { btnCopy.textContent = '复制失败'; });
+            };
+            actions.appendChild(btnCopy);
+
+            const btnRetry = document.createElement('button');
+            btnRetry.textContent = '重新生成';
+            btnRetry.onclick = () => {
+                if (generating) return;
+                if (lastQuestion) send(lastQuestion);
+            };
+            actions.appendChild(btnRetry);
+
+            bubbleWrap.appendChild(actions);
+        }
+
+        wrap.appendChild(avatar);
+        wrap.appendChild(bubbleWrap);
+        el.messages.appendChild(wrap);
+        scrollToBottom(true);
+        return bubble;
+    }
+
+    function renderWelcome() {
+        el.messages.innerHTML = `
+            <div class="welcome">
+                <div class="big">&#128105;&#8205;&#127891;</div>
+                <div class="t">开始咨询育儿问题吧</div>
+                <div class="d">
+                    我会先解析出问题里的年龄段 / 问题类型 / 场景条件，<br>
+                    再从知识库中检索相关内容，给出「详细解释 · 方法建议 · 沟通话术 · 注意事项」
+                </div>
+            </div>`;
+        el.tips.style.display = 'flex';
+        el.tips.innerHTML = SAMPLE_QUESTIONS.map(q => `<span>${escapeHtml(q)}</span>`).join('');
+        el.tips.querySelectorAll('span').forEach(span => {
+            span.onclick = () => { el.input.value = span.textContent; resizeInput(); el.input.focus(); };
+        });
+    }
+
+    function clearWelcome() {
+        const welcome = el.messages.querySelector('.welcome');
+        if (welcome) el.messages.innerHTML = '';
+        el.tips.innerHTML = '';
+        el.tips.style.display = 'none';
+    }
+
+    // ============================ 滚动控制 ============================
+    function isNearBottom() {
+        return el.messages.scrollHeight - el.messages.scrollTop - el.messages.clientHeight < 60;
+    }
+
+    function scrollToBottom(force) {
+        if (force || stickToBottom) {
+            el.messages.scrollTop = el.messages.scrollHeight;
+        }
+    }
+
+    el.messages.addEventListener('scroll', () => {
+        stickToBottom = isNearBottom();
+        el.toBottom.classList.toggle('show', !stickToBottom);
+    });
+
+    el.toBottom.onclick = () => {
+        stickToBottom = true;
+        el.toBottom.classList.remove('show');
+        scrollToBottom(true);
+    };
+
+    function resizeInput() {
+        el.input.style.height = 'auto';
+        el.input.style.height = Math.min(el.input.scrollHeight, 160) + 'px';
+    }
+
+    // ============================ 进度展示 ============================
+    function showProgress(doneList, runningList) {
+        const done = new Set(doneList || []);
+        const running = new Set(runningList || []);
+        if (!done.size && !running.size) { el.progress.innerHTML = ''; return; }
+
+        const chips = QUERY_STEPS
+            .filter(n => done.has(n) || running.has(n))
+            .map(n => running.has(n)
+                ? `<span class="step running">&#10227; ${escapeHtml(n)}</span>`
+                : `<span class="step done">&#10003; ${escapeHtml(n)}</span>`)
+            .join('');
+
+        const tip = el.progress.dataset.slowTip ? `<div class="slow-tip">${el.progress.dataset.slowTip}</div>` : '';
+        el.progress.innerHTML = `<div class="steps">${chips}</div>${tip}`;
+    }
+
+    function clearProgress() {
+        delete el.progress.dataset.slowTip;
+        el.progress.innerHTML = '';
+    }
+
+    // ============================ 生成 ============================
+    function finish() {
+        if (!generating) return;
+        generating = false;
+        clearTimeout(slowTipTimer);
+        clearTimeout(watchdogTimer);
+        el.sendBtn.textContent = '发送';
+        el.sendBtn.classList.remove('stop');
+        el.sendBtn.disabled = false;
+        if (eventSource) { eventSource.close(); eventSource = null; }
+        clearProgress();
+        el.input.focus();
+    }
+
+    function send(question) {
+        const query = (question || '').trim();
+        if (!query || generating) return;
+
+        clearWelcome();
+        lastQuestion = query;
+        el.input.value = '';
+        resizeInput();
+
+        appendMessage('user', query);
+        const bubble = appendMessage('assistant', '', true);
+
+        generating = true;
+        stickToBottom = true;
+        el.sendBtn.textContent = '停止';
+        el.sendBtn.classList.add('stop');
+
+        let answerText = '';
+
+        // 首次提问要加载向量/精排模型，慢的时候给个明确提示
+        el.progress.dataset.slowTip = '';
+        slowTipTimer = setTimeout(() => {
+            el.progress.dataset.slowTip = '首次提问需要加载向量与精排模型，可能需要 1~2 分钟，请稍候…';
+        }, 20000);
+
+        // 兜底看门狗：5 分钟没有任何响应就中断
+        watchdogTimer = setTimeout(() => {
+            if (!answerText) {
+                bubble.textContent = '响应超时。请检查查询服务（8001）是否正常，或稍后重试。';
+            }
+            finish();
+        }, 300000);
+
+        // 先连 SSE，避免错过进度事件
+        if (eventSource) eventSource.close();
+        eventSource = new EventSource(`${API_BASE}/stream/${sessionId}`);
+
+        eventSource.addEventListener('ready', () => {
+            clearProgress();
+        });
+
+        eventSource.addEventListener('progress', e => {
+            try {
+                const data = JSON.parse(e.data);
+                showProgress(data.done_list, data.running_list);
+            } catch (err) { /* 忽略解析异常 */ }
+        });
+
+        eventSource.addEventListener('delta', e => {
+            try {
+                const data = JSON.parse(e.data);
+                answerText += data.delta || '';
+                renderAssistant(bubble, answerText);
+                bubble.insertAdjacentHTML('beforeend', '<span class="cursor"></span>');
+                scrollToBottom();
+            } catch (err) { /* 忽略解析异常 */ }
+        });
+
+        eventSource.addEventListener('final', e => {
+            try {
+                const data = JSON.parse(e.data);
+                if (data.answer) {
+                    answerText = data.answer;
+                    renderAssistant(bubble, answerText);
+                }
+            } catch (err) { /* 忽略解析异常 */ }
+        });
+
+        eventSource.addEventListener('__close__', () => finish());
+
+        // 注意：这里也要处理 EventSource 自身的连接错误（此时 e.data 为 undefined）
+        eventSource.addEventListener('error', e => {
+            if (!e.data) return;
+            try {
+                const data = JSON.parse(e.data);
+                bubble.textContent = '出错了：' + (data.error || '未知错误');
+            } catch (err) {
+                bubble.textContent = '出错了，请稍后重试。';
+            }
+            finish();
+        });
+
+        eventSource.onerror = () => {
+            // 服务端主动关闭（生成结束）也会触发，此时已拿到答案，直接收尾
+            if (!answerText && generating) {
+                bubble.textContent = '连接中断。请确认查询服务（8001）已启动。';
+            }
+            finish();
+        };
+
+        // 再发提问请求
+        fetch(`${API_BASE}/query`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ query, session_id: sessionId, is_stream: true })
+        }).then(res => {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.json();
+        }).catch(err => {
+            clearTimeout(watchdogTimer);
+            bubble.textContent = '请求失败：' + err.message + '（请确认查询服务已启动）';
+            finish();
+        });
+    }
+
+    // ============================ 历史恢复 ============================
+    async function loadHistory() {
+        try {
+            const res = await fetch(`${API_BASE}/history/${sessionId}?limit=50`);
+            if (!res.ok) return;
+            const data = await res.json();
+            const items = (data.items || []).filter(it => (it.text || '').trim());
+
+            if (!items.length) { renderWelcome(); return; }
+
+            el.messages.innerHTML = '';
+            el.tips.style.display = 'none';
+            items.forEach(it => appendMessage(it.role === 'user' ? 'user' : 'assistant', it.text));
+            // 记录最后一次提问，供「重新生成」使用
+            const lastUser = [...items].reverse().find(it => it.role === 'user');
+            if (lastUser) lastQuestion = lastUser.text;
+            scrollToBottom(true);
+        } catch (e) {
+            renderWelcome();
+        }
+    }
+
+    // ============================ 事件绑定 ============================
+    el.sendBtn.onclick = () => {
+        if (generating) { finish(); return; }
+        send(el.input.value);
+    };
+
+    el.input.addEventListener('input', resizeInput);
+    el.input.addEventListener('keydown', e => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (!generating) send(el.input.value);
+        }
+    });
+
+    el.sidText.onclick = () => {
+        navigator.clipboard.writeText(sessionId)
+            .then(() => { el.sidText.textContent = '已复制'; setTimeout(() => { el.sidText.textContent = '会话ID ' + sessionId.slice(0, 10) + '…'; }, 1200); })
+            .catch(() => {});
+    };
+
+    el.btnClear.onclick = async () => {
+        if (!confirm('确定清空当前会话的历史记录吗？')) return;
+        try {
+            await fetch(`${API_BASE}/delete/${sessionId}`, { method: 'DELETE' });
+            lastQuestion = '';
+            renderWelcome();
+            clearProgress();
+        } catch (e) {
+            alert('清空失败，请确认查询服务已启动。');
+        }
+    };
+
+    // ============================ 初始化 ============================
+    resizeInput();
+    el.input.focus();
+    loadHistory();
+</script>
+
+</body>
+</html>

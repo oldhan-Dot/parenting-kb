@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>育儿知识库 · 文档导入</title>
+    <style>
+        :root {
+            --brand: #2f7aed;
+            --brand-dark: #1f5fc0;
+            --ok: #22a06b;
+            --warn: #e0932f;
+            --err: #d64545;
+            --line: #e6eaee;
+            --text: #2c3e50;
+            --muted: #8a99a8;
+            --bg: #f4f6f9;
+        }
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', 'Microsoft YaHei', Tahoma, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 22px 16px 60px;
+            display: flex;
+            justify-content: center;
+        }
+        .container { width: 100%; max-width: 960px; }
+
+        /* ---------- 顶部标题 ---------- */
+        .head { margin-bottom: 16px; }
+        .head h1 { margin: 0 0 4px; font-size: 21px; }
+        .head .sub { color: var(--muted); font-size: 13px; }
+
+        /* ---------- 统计卡片 ---------- */
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-bottom: 14px;
+        }
+        .stat {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 9px;
+            padding: 10px 12px;
+        }
+        .stat .num { font-size: 20px; font-weight: 700; line-height: 1.2; }
+        .stat .label { font-size: 12px; color: var(--muted); margin-top: 2px; }
+        .stat.ok .num { color: var(--ok); }
+        .stat.run .num { color: var(--brand); }
+        .stat.err .num { color: var(--err); }
+
+        /* ---------- 上传区 ---------- */
+        .panel {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 14px;
+        }
+        .drop {
+            border: 2px dashed #bcd4f6;
+            border-radius: 10px;
+            background: #fbfdff;
+            padding: 26px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: background .2s, border-color .2s;
+        }
+        .drop:hover { background: #eef6ff; border-color: var(--brand); }
+        .drop.dragover { background: #e2efff; border-color: var(--brand); }
+        .drop .icon { font-size: 30px; }
+        .drop .main { font-size: 14px; margin: 6px 0 2px; }
+        .drop .tip { font-size: 12px; color: var(--muted); }
+        input[type=file] { display: none; }
+
+        .toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+        button {
+            font-family: inherit;
+            font-size: 13px;
+            padding: 7px 14px;
+            border-radius: 7px;
+            border: 1px solid var(--line);
+            background: #fff;
+            color: #55636f;
+            cursor: pointer;
+            transition: background .15s, border-color .15s;
+        }
+        button:hover:not(:disabled) { background: #f4f7fa; border-color: #d3dbe3; }
+        button:disabled { opacity: .45; cursor: not-allowed; }
+        button.primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+        button.primary:hover:not(:disabled) { background: var(--brand-dark); border-color: var(--brand-dark); }
+        button.danger { color: var(--err); }
+
+        /* ---------- 任务列表 ---------- */
+        .list-head {
+            display: flex; justify-content: space-between; align-items: center;
+            margin: 4px 2px 10px;
+        }
+        .list-head .title { font-size: 14px; font-weight: 600; }
+        .filter { display: flex; gap: 6px; }
+        .filter button { padding: 4px 10px; font-size: 12px; }
+        .filter button.active { background: #eaf2ff; border-color: #bcd4f6; color: var(--brand); }
+
+        .job {
+            background: #fff;
+            border: 1px solid var(--line);
+            border-left: 3px solid #d7dde4;
+            border-radius: 9px;
+            padding: 12px 14px;
+            margin-bottom: 9px;
+        }
+        .job.s-completed { border-left-color: var(--ok); }
+        .job.s-failed { border-left-color: var(--err); background: #fffafa; }
+        .job.s-processing, .job.s-uploading { border-left-color: var(--brand); }
+        .job.s-queued { border-left-color: #c3ccd6; }
+
+        .job-top { display: flex; align-items: center; gap: 10px; }
+        .job-name {
+            font-size: 13.5px; font-weight: 600;
+            flex: 1; min-width: 0;
+            overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        }
+        .job-meta { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+        .badge {
+            font-size: 11.5px; font-weight: 600; padding: 3px 9px;
+            border-radius: 11px; white-space: nowrap;
+        }
+        .badge.queued { background: #eef1f4; color: #6c7a89; }
+        .badge.uploading, .badge.processing { background: #e7f0ff; color: var(--brand); }
+        .badge.completed { background: #e6f6ef; color: var(--ok); }
+        .badge.failed { background: #fdeaea; color: var(--err); }
+
+        /* ---------- 步骤条 ---------- */
+        .steps { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 9px; }
+        .step {
+            font-size: 11.5px; padding: 2px 8px; border-radius: 10px;
+            background: #f2f5f8; color: #93a1ae;
+        }
+        .step.done { background: #e6f6ef; color: var(--ok); }
+        .step.running {
+            background: #e7f0ff; color: var(--brand); font-weight: 600;
+            animation: pulse 1.4s ease-in-out infinite;
+        }
+        .step.broken { background: #fdeaea; color: var(--err); font-weight: 600; }
+        @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
+
+        .bar-wrap {
+            height: 4px; background: #eef1f4; border-radius: 2px;
+            overflow: hidden; margin-top: 9px; display: none;
+        }
+        .bar { height: 100%; width: 0; background: var(--brand); transition: width .35s; }
+        .job.s-completed .bar { background: var(--ok); }
+        .job.s-failed .bar { background: var(--err); }
+
+        .job-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 8px; }
+        .job-hint { font-size: 11.5px; color: var(--muted); flex: 1; }
+        .job-hint.error { color: var(--err); }
+        details.logs { margin-top: 6px; }
+        details.logs summary { font-size: 11.5px; color: var(--muted); cursor: pointer; user-select: none; }
+        .log-list { margin: 5px 0 0 16px; padding: 0; font-size: 11.5px; color: #7f8c8d; }
+        .log-list li { margin: 2px 0; line-height: 1.5; }
+        .empty { text-align: center; color: var(--muted); font-size: 13px; padding: 34px 0; }
+
+        .notice {
+            background: #fff8e8; border: 1px solid #f2dfae; color: #8a6a1f;
+            border-radius: 8px; padding: 9px 12px; font-size: 12.5px; margin-bottom: 14px;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <div class="head">
+        <h1>育儿知识库 · 文档导入</h1>
+        <div class="sub">支持 PDF / Markdown，可一次选择多个文件批量导入</div>
+    </div>
+
+    <div class="stats">
+        <div class="stat"><div class="num" id="st-total">0</div><div class="label">总文件</div></div>
+        <div class="stat"><div class="num" id="st-queued">0</div><div class="label">排队中</div></div>
+        <div class="stat run"><div class="num" id="st-running">0</div><div class="label">处理中</div></div>
+        <div class="stat ok"><div class="num" id="st-done">0</div><div class="label">已完成</div></div>
+        <div class="stat err"><div class="num" id="st-failed">0</div><div class="label">失败</div></div>
+    </div>
+
+    <div class="panel">
+        <div class="drop" id="dropZone">
+            <div class="icon">&#9729;</div>
+            <div class="main">点击选择文件，或把文件拖到页面任意位置</div>
+            <div class="tip">建议 Markdown 头部带有「## 元数据」段（内容类型 / 年龄段 / 问题类型 / 场景描述）</div>
+            <input type="file" id="fileInput" multiple accept=".pdf,.md">
+        </div>
+        <div class="toolbar">
+            <button class="primary" id="btnUpload" disabled>开始导入</button>
+            <button id="btnRetry" disabled>重试失败项</button>
+            <button id="btnCopy">复制任务清单</button>
+            <button class="danger" id="btnClearDone" disabled>清除已完成</button>
+            <button class="danger" id="btnClearAll" disabled>清空列表</button>
+        </div>
+    </div>
+
+    <div class="notice">
+        提示：首次导入会加载向量模型（BGE-M3），第一篇需要等 30~60 秒，属正常现象。刷新页面进度不会丢失。
+    </div>
+
+    <div class="list-head">
+        <div class="title">任务列表</div>
+        <div class="filter">
+            <button data-filter="all" class="active">全部</button>
+            <button data-filter="running">进行中</button>
+            <button data-filter="failed">失败</button>
+            <button data-filter="completed">已完成</button>
+        </div>
+    </div>
+
+    <div id="jobs"></div>
+
+</div>
+
+<script>
+    const API_BASE = 'http://127.0.0.1:8000';
+    const STORAGE_KEY = 'parenting_import_jobs';
+
+    // 导入流水线的节点顺序（中文名，与后端 task_utils 的映射一致）
+    // md 文件会跳过「PDF转Markdown」，这里按出现情况动态渲染
+    const NODE_SEQUENCE = [
+        '开始上传文件', '检查文件类型', 'PDF转Markdown', 'Markdown图片处理',
+        '文档切分', '元数据抽取', '向量生成', '导入向量库', '处理完成'
+    ];
+
+    const el = {
+        drop: document.getElementById('dropZone'),
+        input: document.getElementById('fileInput'),
+        jobs: document.getElementById('jobs'),
+        btnUpload: document.getElementById('btnUpload'),
+        btnRetry: document.getElementById('btnRetry'),
+        btnCopy: document.getElementById('btnCopy'),
+        btnClearDone: document.getElementById('btnClearDone'),
+        btnClearAll: document.getElementById('btnClearAll'),
+        stTotal: document.getElementById('st-total'),
+        stQueued: document.getElementById('st-queued'),
+        stRunning: document.getElementById('st-running'),
+        stDone: document.getElementById('st-done'),
+        stFailed: document.getElementById('st-failed'),
+    };
+
+    /** 任务列表：{ id, name, size, taskId, status, doneList, runningList, error, file } */
+    let jobs = [];
+    let filter = 'all';
+    let pollTimer = null;
+
+    // ============================ 持久化 ============================
+    // File 对象无法序列化，刷新后只恢复进度，重试需要重新选文件
+    function save() {
+        const plain = jobs.map(j => ({
+            id: j.id, name: j.name, size: j.size, taskId: j.taskId,
+            status: j.status, doneList: j.doneList, runningList: j.runningList, error: j.error
+        }));
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(plain));
+    }
+
+    function restore() {
+        try {
+            const raw = localStorage.getItem(STORAGE_KEY);
+            if (!raw) return;
+            jobs = JSON.parse(raw).map(j => ({ ...j, file: null }));
+        } catch (e) {
+            jobs = [];
+        }
+    }
+
+    // ============================ 添加文件 ============================
+    function addFiles(fileList) {
+        const added = [];
+        let skippedType = 0, skippedDup = 0;
+
+        Array.from(fileList).forEach(file => {
+            const lower = file.name.toLowerCase();
+            if (!lower.endsWith('.md') && !lower.endsWith('.pdf')) { skippedType++; return; }
+
+            const key = file.name + '_' + file.size;
+            if (jobs.some(j => j.id === key)) { skippedDup++; return; }
+
+            jobs.push({
+                id: key, name: file.name, size: file.size, file,
+                taskId: null, status: 'queued',
+                doneList: [], runningList: [], error: ''
+            });
+            added.push(file.name);
+        });
+
+        const msgs = [];
+        if (added.length) msgs.push(`已添加 ${added.length} 个文件`);
+        if (skippedType) msgs.push(`忽略 ${skippedType} 个不支持的文件（仅支持 .md / .pdf）`);
+        if (skippedDup) msgs.push(`忽略 ${skippedDup} 个重复文件`);
+        if (msgs.length) toast(msgs.join('，'));
+
+        save(); render();
+    }
+
+    let toastTimer = null;
+    function toast(text) {
+        let box = document.getElementById('toast');
+        if (!box) {
+            box = document.createElement('div');
+            box.id = 'toast';
+            box.style.cssText = 'position:fixed;left:50%;transform:translateX(-50%);bottom:26px;' +
+                'background:rgba(44,62,80,.94);color:#fff;font-size:13px;padding:9px 18px;border-radius:20px;' +
+                'z-index:99;max-width:80vw;text-align:center;transition:opacity .3s';
+            document.body.appendChild(box);
+        }
+        box.textContent = text;
+        box.style.opacity = '1';
+        clearTimeout(toastTimer);
+        toastTimer = setTimeout(() => { box.style.opacity = '0'; }, 3000);
+    }
+
+    // ============================ 上传 ============================
+    async function uploadPending() {
+        const pending = jobs.filter(j => j.status === 'queued' && j.file);
+        if (!pending.length) { toast('没有待上传的文件'); return; }
+
+        pending.forEach(j => { j.status = 'uploading'; j.error = ''; });
+        render();
+
+        try {
+            // 后端 /upload 支持 List[UploadFile]，一次请求带上所有待传文件
+            const formData = new FormData();
+            pending.forEach(j => formData.append('files', j.file, j.name));
+
+            const res = await fetch(`${API_BASE}/upload`, { method: 'POST', body: formData });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+
+            const data = await res.json();
+            const taskIds = data.task_ids || [];
+
+            pending.forEach((j, i) => {
+                j.taskId = taskIds[i] || null;
+                j.status = j.taskId ? 'processing' : 'failed';
+                if (!j.taskId) j.error = '服务端未返回 task_id';
+            });
+
+            save(); render(); startPolling();
+        } catch (e) {
+            pending.forEach(j => {
+                j.status = 'failed';
+                j.error = '上传失败：' + e.message + '（请确认导入服务已启动）';
+            });
+            save(); render();
+        }
+    }
+
+    // ============================ 轮询 ============================
+    function startPolling() {
+        if (pollTimer) return;
+        pollTimer = setInterval(pollAll, 2000);
+        pollAll();
+    }
+
+    async function pollAll() {
+        const active = jobs.filter(j => j.taskId && j.status !== 'completed' && j.status !== 'failed');
+        if (!active.length) {
+            clearInterval(pollTimer); pollTimer = null;
+            updateTitle();
+            return;
+        }
+
+        await Promise.all(active.map(async job => {
+            try {
+                const res = await fetch(`${API_BASE}/status/${job.taskId}`);
+                if (!res.ok) return;
+                const data = await res.json();
+
+                job.doneList = data.done_list || [];
+                job.runningList = data.running_list || [];
+
+                if (data.status === 'completed') job.status = 'completed';
+                else if (data.status === 'failed') {
+                    job.status = 'failed';
+                    job.error = '处理失败，失败位置见上方红色步骤；详细原因请看服务端终端或 logs/ 日志';
+                } else job.status = 'processing';
+            } catch (e) {
+                // 网络抖动，下一轮再试
+            }
+        }));
+
+        save(); render(); updateTitle();
+    }
+
+    function updateTitle() {
+        const total = jobs.length, done = jobs.filter(j => j.status === 'completed').length;
+        document.title = total && done < total
+            ? `(${done}/${total}) 育儿知识库 · 文档导入`
+            : '育儿知识库 · 文档导入';
+    }
+
+    // ============================ 渲染 ============================
+    function escapeHtml(t) {
+        return String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    function fmtSize(bytes) {
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1024 / 1024).toFixed(2) + ' MB';
+    }
+
+    const STATUS_TEXT = {
+        queued: '排队中', uploading: '上传中', processing: '处理中',
+        completed: '已完成', failed: '失败'
+    };
+
+    function renderSteps(job) {
+        const done = new Set(job.doneList);
+        const running = new Set(job.runningList);
+
+        let names = NODE_SEQUENCE.filter(n => done.has(n) || running.has(n));
+        if (job.status === 'completed' && !done.has('处理完成')) names.push('处理完成');
+
+        return names.map(n => {
+            if (running.has(n)) {
+                const cls = job.status === 'failed' ? 'broken' : 'running';
+                const mark = job.status === 'failed' ? '\u2715' : '\u27f3';
+                return `<span class="step ${cls}">${mark} ${escapeHtml(n)}</span>`;
+            }
+            return `<span class="step done">\u2713 ${escapeHtml(n)}</span>`;
+        }).join('');
+    }
+
+    function progressOf(job) {
+        if (job.status === 'completed') return 100;
+        // 用「已出现过的节点数 / 总节点数」估算进度（跳过不适用于 md 的 PDF 节点）
+        const seen = new Set([...job.doneList, ...job.runningList]);
+        const applicable = NODE_SEQUENCE.filter(n => n !== 'PDF转Markdown');
+        const hit = applicable.filter(n => seen.has(n)).length;
+        return Math.min(95, Math.round(hit / applicable.length * 100));
+    }
+
+    function renderJob(job) {
+        const steps = renderSteps(job);
+        const pct = progressOf(job);
+        const hint = job.status === 'failed'
+            ? `<div class="job-hint error">${escapeHtml(job.error || '处理失败')}</div>`
+            : `<div class="job-hint">${job.taskId ? 'task_id: ' + escapeHtml(job.taskId.slice(0, 8)) + '…' : '等待上传'}</div>`;
+
+        const retryBtn = job.status === 'failed'
+            ? (job.file
+                ? `<button onclick="retryOne('${job.id}')">重试</button>`
+                : `<button disabled title="刷新后需要重新选择该文件">重试（需重新选文件）</button>`)
+            : '';
+
+        const logs = [...job.doneList.map(n => `已完成：${n}`),
+                      ...job.runningList.map(n => `进行中：${n}`)];
+
+        return `
+            <div class="job s-${job.status}">
+                <div class="job-top">
+                    <div class="job-name" title="${escapeHtml(job.name)}">${escapeHtml(job.name)}</div>
+                    <div class="job-meta">${fmtSize(job.size)}</div>
+                    <span class="badge ${job.status}">${STATUS_TEXT[job.status] || job.status}</span>
+                </div>
+                ${steps ? `<div class="steps">${steps}</div>` : ''}
+                <div class="bar-wrap" style="display:${job.status === 'queued' ? 'none' : 'block'}">
+                    <div class="bar" style="width:${pct}%"></div>
+                </div>
+                <div class="job-foot">
+                    ${hint}
+                    <div>${retryBtn}</div>
+                </div>
+                ${logs.length ? `
+                <details class="logs">
+                    <summary>执行日志（${logs.length} 条）</summary>
+                    <ul class="log-list">${logs.map(l => `<li>${escapeHtml(l)}</li>`).join('')}</ul>
+                </details>` : ''}
+            </div>`;
+    }
+
+    function matchFilter(job) {
+        if (filter === 'all') return true;
+        if (filter === 'running') return ['queued', 'uploading', 'processing'].includes(job.status);
+        return job.status === filter;
+    }
+
+    function render() {
+        const counts = { queued: 0, uploading: 0, processing: 0, completed: 0, failed: 0 };
+        jobs.forEach(j => { counts[j.status] = (counts[j.status] || 0) + 1; });
+
+        el.stTotal.textContent = jobs.length;
+        el.stQueued.textContent = counts.queued;
+        el.stRunning.textContent = counts.uploading + counts.processing;
+        el.stDone.textContent = counts.completed;
+        el.stFailed.textContent = counts.failed;
+
+        const visible = jobs.filter(matchFilter);
+        el.jobs.innerHTML = visible.length
+            ? visible.map(renderJob).join('')
+            : `<div class="empty">${jobs.length ? '当前筛选下没有任务' : '还没有任务，先选择要导入的文件吧'}</div>`;
+
+        el.btnUpload.disabled = counts.queued === 0;
+        el.btnRetry.disabled = counts.failed === 0;
+        el.btnClearDone.disabled = counts.completed === 0;
+        el.btnClearAll.disabled = jobs.length === 0;
+    }
+
+    // ============================ 操作 ============================
+    function retryOne(id) {
+        const job = jobs.find(j => j.id === id);
+        if (!job) return;
+        if (!job.file) { toast('刷新后文件对象已丢失，请重新选择该文件'); return; }
+        job.status = 'queued';
+        job.error = '';
+        job.taskId = null;
+        job.doneList = [];
+        job.runningList = [];
+        save(); render();
+        uploadPending();
+    }
+
+    function retryFailed() {
+        const failed = jobs.filter(j => j.status === 'failed');
+        const withFile = failed.filter(j => j.file);
+        if (!withFile.length) {
+            toast('失败项的文件对象已丢失（页面刷新过），请重新选择文件');
+            return;
+        }
+        withFile.forEach(j => {
+            j.status = 'queued'; j.error = ''; j.taskId = null;
+            j.doneList = []; j.runningList = [];
+        });
+        save(); render();
+        uploadPending();
+    }
+
+    function copyManifest() {
+        if (!jobs.length) { toast('列表为空'); return; }
+        const lines = jobs.map((j, i) =>
+            `${i + 1}\t${STATUS_TEXT[j.status] || j.status}\t${j.taskId || '-'}\t${j.name}`
+        );
+        const text = ['序号\t状态\ttask_id\t文件名', ...lines].join('\n');
+        navigator.clipboard.writeText(text)
+            .then(() => toast('任务清单已复制到剪贴板'))
+            .catch(() => toast('复制失败，请手动选择文本'));
+    }
+
+    // ============================ 事件绑定 ============================
+    el.drop.addEventListener('click', () => el.input.click());
+    el.input.addEventListener('change', e => { addFiles(e.target.files); el.input.value = ''; });
+
+    // 整页拖拽
+    let dragDepth = 0;
+    document.addEventListener('dragenter', e => {
+        e.preventDefault();
+        if (++dragDepth === 1) el.drop.classList.add('dragover');
+    });
+    document.addEventListener('dragover', e => e.preventDefault());
+    document.addEventListener('dragleave', e => {
+        e.preventDefault();
+        if (--dragDepth <= 0) { dragDepth = 0; el.drop.classList.remove('dragover'); }
+    });
+    document.addEventListener('drop', e => {
+        e.preventDefault();
+        dragDepth = 0;
+        el.drop.classList.remove('dragover');
+        if (e.dataTransfer && e.dataTransfer.files.length) addFiles(e.dataTransfer.files);
+    });
+
+    el.btnUpload.addEventListener('click', uploadPending);
+    el.btnRetry.addEventListener('click', retryFailed);
+    el.btnCopy.addEventListener('click', copyManifest);
+
+    el.btnClearDone.addEventListener('click', () => {
+        jobs = jobs.filter(j => j.status !== 'completed');
+        save(); render();
+    });
+
+    el.btnClearAll.addEventListener('click', () => {
+        if (!confirm('确定清空列表吗？已经导入到向量库的数据不会被删除。')) return;
+        jobs = [];
+        save(); render();
+    });
+
+    document.querySelectorAll('.filter button').forEach(btn => {
+        btn.addEventListener('click', () => {
+            document.querySelectorAll('.filter button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            filter = btn.dataset.filter;
+            render();
+        });
+    });
+
+    // 页面重新可见时立即刷新一次进度
+    document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) pollAll();
+    });
+
+    // ============================ 初始化 ============================
+    restore();
+    render();
+    updateTitle();
+    if (jobs.some(j => j.taskId && j.status !== 'completed' && j.status !== 'failed')) {
+        startPolling();
+    }
+</script>
+
+</body>
+</html>
