@@ -22,7 +22,7 @@ from starlette.middleware.cors import CORSMiddleware
 
 from app.clients.mongo_history_utils import clear_history, get_recent_messages
 from app.core.logger import logger
-from app.lm.ars_utils import transcribe
+from app.lm.asr_utils import transcribe
 from app.query_process.agent.main_graph import kb_query_app
 from app.query_process.agent.state import create_query_default_state
 from app.utils.path_util import PROJECT_ROOT
