@@ -4,7 +4,7 @@
 LangGraph 用 TypedDict 描述状态，节点之间通过这个字典传递数据。
 """
 import copy
-from typing import TypedDict, Dict
+from typing import Any, TypedDict, Dict
 
 # 育儿领域常量统一定义在 app/conf/domain_config.py，这里统一转出，方便业务模块直接引用
 from app.conf.domain_config import (  # noqa: F401
@@ -36,7 +36,7 @@ class ImportGraphState(TypedDict):
 
     # --- 内容数据 ---
     md_content: str              # Markdown 全文
-    chunks: list                 # 切片列表（含 metadata 与向量）
+    chunks: list                # 切片列表（含 metadata 与向量）
     metadata: Dict[str, str]     # 文档级元数据（内容类型/年龄段/问题类型/场景/标题/作者）
 
 

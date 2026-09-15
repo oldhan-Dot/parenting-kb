@@ -203,6 +203,39 @@
         .composer button:disabled { background: #c6d0da; cursor: not-allowed; }
         .composer button.stop { background: var(--err); }
 
+        /* ---------- 语音输入 ---------- */
+        /* 注意：选择器必须带 .composer，否则会被上面的 .composer button 覆盖掉 */
+        .composer .mic-btn {
+            width: 46px; height: 46px; flex-shrink: 0; padding: 0;
+            border: 1px solid var(--line); background: #fff; color: #5a6b7b;
+            border-radius: 9px; font-size: 17px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            transition: all .15s;
+        }
+        .composer .mic-btn:hover:not(:disabled) { border-color: var(--brand); background: #f4f8ff; color: var(--brand); }
+        .composer .mic-btn:disabled { opacity: .45; cursor: not-allowed; }
+        .composer .mic-btn.recording {
+            background: var(--err); border-color: var(--err); color: #fff;
+            animation: pulse 1.2s ease-in-out infinite;
+        }
+        .mic-tip { padding: 0 22px; font-size: 12px; color: var(--muted); }
+        .mic-tip:not(:empty) { padding-bottom: 6px; }
+        .mic-tip.err { color: var(--err); }
+
+        /* 语音气泡占位：三个跳动点，营造"已发出、正在处理"的感觉（不出现"识别中"字样） */
+        .voice-dots { display: inline-flex; gap: 4px; align-items: center; height: 18px; }
+        .voice-dots i {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #7fa8d4; animation: voiceBounce 1.2s infinite ease-in-out;
+        }
+        .voice-dots i:nth-child(2) { animation-delay: .15s; }
+        .voice-dots i:nth-child(3) { animation-delay: .3s; }
+        @keyframes voiceBounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: .45; }
+            30% { transform: translateY(-5px); opacity: 1; }
+        }
+        .voice-failed { color: var(--err); font-size: 13px; }
+
         /* ---------- 欢迎页 ---------- */
         .welcome { text-align: center; padding: 48px 20px 20px; color: var(--muted); }
         .welcome .big { font-size: 34px; margin-bottom: 10px; }
@@ -239,10 +272,12 @@
     <div class="progress" id="progress"></div>
 
     <div class="tips" id="tips"></div>
+    <div class="mic-tip" id="micTip"></div>
 
     <div class="composer">
         <textarea id="input"
                   placeholder="描述您遇到的育儿问题，例如：3-6岁孩子发脾气躺地上怎么办？（Enter 发送 / Shift+Enter 换行）"></textarea>
+        <button id="micBtn" class="mic-btn" title="点击开始录音，说完自动识别并发送">&#127908;</button>
         <button id="sendBtn">发送</button>
     </div>
 
@@ -275,6 +310,8 @@
         btnClear: document.getElementById('btnClear'),
         tips: document.getElementById('tips'),
         toBottom: document.getElementById('toBottom'),
+        micBtn: document.getElementById('micBtn'),
+        micTip: document.getElementById('micTip'),
     };
 
     // ---------- 会话ID：同一浏览器持久复用，便于复现问题 ----------
@@ -502,12 +539,13 @@
         el.sendBtn.textContent = '发送';
         el.sendBtn.classList.remove('stop');
         el.sendBtn.disabled = false;
+        el.micBtn.disabled = false;
         if (eventSource) { eventSource.close(); eventSource = null; }
         clearProgress();
         el.input.focus();
     }
 
-    function send(question) {
+    function send(question, userBubble) {
         const query = (question || '').trim();
         if (!query || generating) return;
 
@@ -516,13 +554,20 @@
         el.input.value = '';
         resizeInput();
 
-        appendMessage('user', query);
+        if (userBubble) {
+            // 语音输入：气泡已提前占位在页面上，这里只把占位替换成识别出的文字
+            userBubble.textContent = query;
+        } else {
+            appendMessage('user', query);
+        }
         const bubble = appendMessage('assistant', '', true);
 
         generating = true;
         stickToBottom = true;
         el.sendBtn.textContent = '停止';
         el.sendBtn.classList.add('stop');
+        el.micBtn.disabled = true;   // 生成答案期间禁止录音
+        setMicTip('');
 
         let answerText = '';
 
@@ -540,64 +585,8 @@
             finish();
         }, 300000);
 
-        // 先连 SSE，避免错过进度事件
-        if (eventSource) eventSource.close();
-        eventSource = new EventSource(`${API_BASE}/stream/${sessionId}`);
-
-        eventSource.addEventListener('ready', () => {
-            clearProgress();
-        });
-
-        eventSource.addEventListener('progress', e => {
-            try {
-                const data = JSON.parse(e.data);
-                showProgress(data.done_list, data.running_list);
-            } catch (err) { /* 忽略解析异常 */ }
-        });
-
-        eventSource.addEventListener('delta', e => {
-            try {
-                const data = JSON.parse(e.data);
-                answerText += data.delta || '';
-                renderAssistant(bubble, answerText);
-                bubble.insertAdjacentHTML('beforeend', '<span class="cursor"></span>');
-                scrollToBottom();
-            } catch (err) { /* 忽略解析异常 */ }
-        });
-
-        eventSource.addEventListener('final', e => {
-            try {
-                const data = JSON.parse(e.data);
-                if (data.answer) {
-                    answerText = data.answer;
-                    renderAssistant(bubble, answerText);
-                }
-            } catch (err) { /* 忽略解析异常 */ }
-        });
-
-        eventSource.addEventListener('__close__', () => finish());
-
-        // 注意：这里也要处理 EventSource 自身的连接错误（此时 e.data 为 undefined）
-        eventSource.addEventListener('error', e => {
-            if (!e.data) return;
-            try {
-                const data = JSON.parse(e.data);
-                bubble.textContent = '出错了：' + (data.error || '未知错误');
-            } catch (err) {
-                bubble.textContent = '出错了，请稍后重试。';
-            }
-            finish();
-        });
-
-        eventSource.onerror = () => {
-            // 服务端主动关闭（生成结束）也会触发，此时已拿到答案，直接收尾
-            if (!answerText && generating) {
-                bubble.textContent = '连接中断。请确认查询服务（8001）已启动。';
-            }
-            finish();
-        };
-
-        // 再发提问请求
+        // 顺序很关键：必须先 POST /query（服务端在这一步创建 SSE 队列），再建立 SSE 连接。
+        // 若反过来先连 SSE，服务端发现队列还不存在会立即关闭连接，前端就会误报"连接中断"。
         fetch(`${API_BASE}/query`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -605,12 +594,273 @@
         }).then(res => {
             if (!res.ok) throw new Error('HTTP ' + res.status);
             return res.json();
+        }).then(() => {
+            // 队列已就绪，此时再连；期间产生的事件都缓存在队列中，不会丢
+            connectStream();
         }).catch(err => {
             clearTimeout(watchdogTimer);
-            bubble.textContent = '请求失败：' + err.message + '（请确认查询服务已启动）';
+            clearTimeout(slowTipTimer);
+            bubble.textContent = '请求失败：' + err.message + '（请确认查询服务 8001 已启动）';
             finish();
         });
+
+        function connectStream() {
+            // 用户可能已经点了「停止」，此时不再建立连接
+            if (!generating) return;
+
+            if (eventSource) eventSource.close();
+            eventSource = new EventSource(`${API_BASE}/stream/${sessionId}`);
+
+            eventSource.addEventListener('ready', () => {
+                clearProgress();
+            });
+
+            eventSource.addEventListener('progress', e => {
+                try {
+                    const data = JSON.parse(e.data);
+                    showProgress(data.done_list, data.running_list);
+                } catch (err) { /* 忽略解析异常 */ }
+            });
+
+            eventSource.addEventListener('delta', e => {
+                try {
+                    const data = JSON.parse(e.data);
+                    answerText += data.delta || '';
+                    renderAssistant(bubble, answerText);
+                    bubble.insertAdjacentHTML('beforeend', '<span class="cursor"></span>');
+                    scrollToBottom();
+                } catch (err) { /* 忽略解析异常 */ }
+            });
+
+            eventSource.addEventListener('final', e => {
+                try {
+                    const data = JSON.parse(e.data);
+                    if (data.answer) {
+                        answerText = data.answer;
+                        renderAssistant(bubble, answerText);
+                    }
+                } catch (err) { /* 忽略解析异常 */ }
+                // 收到完整答案即视为结束，主动收尾，不依赖连接关闭事件
+                setTimeout(finish, 200);
+            });
+
+            eventSource.addEventListener('__close__', () => finish());
+
+            // 服务端推送的业务错误（带 data）；EventSource 自身的连接错误没有 data
+            eventSource.addEventListener('error', e => {
+                if (!e.data) return;
+                try {
+                    const data = JSON.parse(e.data);
+                    bubble.textContent = '出错了：' + (data.error || '未知错误');
+                } catch (err) {
+                    bubble.textContent = '出错了，请稍后重试。';
+                }
+                finish();
+            });
+
+            // 连接层兜底：只有"一个字都没收到"时才判定为连接问题
+            eventSource.onerror = () => {
+                if (!answerText && generating) {
+                    bubble.textContent = '连接中断：未能与查询服务的流式接口建立连接，请查看 8001 服务终端的日志。';
+                }
+                finish();
+            };
+        }
     }
+
+    // ============================ 语音输入（16kHz 单声道 WAV · 说完自动发送） ============================
+    // 流程：点麦克风 → 说话 → 静音 1.5 秒自动结束（或点方块提前结束）
+    //       → 上传识别 → 识别成功直接发送，不用再点「发送」
+    const MIC_MIN_SECONDS = 0.4;      // 录音短于此时长视为误触
+    const MIC_MAX_SECONDS = 30;       // 最长录音保护，防止忘关一直录
+    const SILENCE_RMS = 0.012;        // 静音判定阈值（调小更灵敏，容易提前截断）
+    const SILENCE_HOLD_MS = 1500;     // 连续静音超过这么久，认为说完了
+
+    let audioCtx = null;
+    let mediaStream = null;
+    let processor = null;
+    let muteGain = null;
+    let pcmChunks = [];
+    let recording = false;
+    let heardVoice = false;           // 本次录音中是否已检测到人声
+    let silenceStart = 0;             // 静音起始时间戳
+    let maxTimer = null;
+
+    function setMicTip(text, isErr) {
+        el.micTip.textContent = text || '';
+        el.micTip.classList.toggle('err', !!isErr);
+    }
+
+    async function startRecording() {
+        if (recording || generating) return;
+        if (!navigator.mediaDevices || !window.AudioContext) {
+            setMicTip('当前浏览器不支持录音，请用 Chrome / Edge 打开。', true);
+            return;
+        }
+        try {
+            // 需要 localhost 或 https，用 127.0.0.1 打开页面即可
+            mediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true }
+            });
+
+            // 直接要 16kHz —— 正是 SenseVoice 需要的采样率，服务端零转换
+            audioCtx = new AudioContext({ sampleRate: 16000 });
+            const source = audioCtx.createMediaStreamSource(mediaStream);
+
+            pcmChunks = [];
+            heardVoice = false;
+            silenceStart = 0;
+
+            processor = audioCtx.createScriptProcessor(4096, 1, 1);
+            processor.onaudioprocess = e => {
+                // 必须拷贝：这个缓冲区会被反复复用
+                const data = new Float32Array(e.inputBuffer.getChannelData(0));
+                pcmChunks.push(data);
+
+                // ---- 静音检测：说完了自动结束 ----
+                let sum = 0;
+                for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+                const rms = Math.sqrt(sum / data.length);
+
+                if (rms > SILENCE_RMS) {
+                    heardVoice = true;
+                    silenceStart = 0;
+                } else if (heardVoice) {
+                    if (!silenceStart) silenceStart = Date.now();
+                    else if (Date.now() - silenceStart > SILENCE_HOLD_MS) setTimeout(stopRecording, 0);
+                }
+            };
+
+            // processor 必须接到 destination 才会触发回调；
+            // 但直连会把麦克风声音外放（啸叫），所以中间串一个音量 0 的 GainNode
+            muteGain = audioCtx.createGain();
+            muteGain.gain.value = 0;
+            source.connect(processor);
+            processor.connect(muteGain);
+            muteGain.connect(audioCtx.destination);
+
+            recording = true;
+            el.micBtn.classList.add('recording');
+            el.micBtn.textContent = '■';
+            setMicTip('正在录音… 说完稍等片刻会自动发送，也可点方块提前结束');
+
+            maxTimer = setTimeout(stopRecording, MIC_MAX_SECONDS * 1000);
+        } catch (e) {
+            // 最常见：用户拒绝了麦克风权限
+            setMicTip('无法访问麦克风：' + e.message + '（请检查浏览器权限）', true);
+            cleanupRecording();
+        }
+    }
+
+    function stopRecording() {
+        if (!recording) return;
+        recording = false;
+        clearTimeout(maxTimer);
+        el.micBtn.classList.remove('recording');
+        const realRate = audioCtx ? audioCtx.sampleRate : 16000;  // 部分设备不给 16k，取真实值
+        const chunks = pcmChunks;
+        cleanupRecording();
+        handleWav(chunks, realRate);
+    }
+
+    function cleanupRecording() {
+        if (processor) { processor.disconnect(); processor.onaudioprocess = null; processor = null; }
+        if (muteGain) { muteGain.disconnect(); muteGain = null; }
+        if (mediaStream) { mediaStream.getTracks().forEach(t => t.stop()); mediaStream = null; }
+        if (audioCtx) { audioCtx.close(); audioCtx = null; }
+    }
+
+    /** Float32 PCM → 16bit 单声道 WAV Blob */
+    function encodeWav(chunks, sampleRate) {
+        const total = chunks.reduce((n, c) => n + c.length, 0);
+        const view = new DataView(new ArrayBuffer(44 + total * 2));
+
+        const writeStr = (off, s) => {
+            for (let i = 0; i < s.length; i++) view.setUint8(off + i, s.charCodeAt(i));
+        };
+        writeStr(0, 'RIFF');
+        view.setUint32(4, 36 + total * 2, true);   // 文件总长
+        writeStr(8, 'WAVE');
+        writeStr(12, 'fmt ');
+        view.setUint32(16, 16, true);              // fmt 块长度
+        view.setUint16(20, 1, true);               // 1 = PCM
+        view.setUint16(22, 1, true);               // 单声道
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * 2, true);  // 字节率 = 采样率 × 声道 × 位深/8
+        view.setUint16(32, 2, true);               // 块对齐
+        view.setUint16(34, 16, true);              // 位深 16
+        writeStr(36, 'data');
+        view.setUint32(40, total * 2, true);       // 数据长度
+
+        let off = 44;
+        for (const chunk of chunks) {
+            for (let i = 0; i < chunk.length; i++) {
+                const s = Math.max(-1, Math.min(1, chunk[i]));   // 先夹紧防爆音
+                view.setInt16(off, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+                off += 2;
+            }
+        }
+        return new Blob([view], { type: 'audio/wav' });
+    }
+
+    async function handleWav(chunks, sampleRate) {
+        const totalSamples = chunks.reduce((n, c) => n + c.length, 0);
+        const seconds = totalSamples / sampleRate;
+
+        if (seconds < MIC_MIN_SECONDS) {
+            setMicTip('录音太短了，请多说几个字再试。', true);
+            return;
+        }
+
+        if (generating) return;
+
+        // ① 立刻把"用户消息"摆到聊天区：用户感知是秒发，
+        //    识别在后台静默进行，页面上不出现任何"识别中"字样
+        clearWelcome();
+        const userBubble = appendMessage('user', '');
+        userBubble.innerHTML = '<span class="voice-dots"><i></i><i></i><i></i></span>';
+        setMicTip('');
+
+        el.micBtn.textContent = '…';
+        el.micBtn.disabled = true;
+
+        const form = new FormData();
+        form.append('file', encodeWav(chunks, sampleRate), 'voice.wav');   // 后缀必须是 .wav
+
+        let text = '';
+        try {
+            const res = await fetch(`${API_BASE}/asr`, { method: 'POST', body: form });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const data = await res.json();
+            text = (data.text || '').trim();
+        } catch (e) {
+            userBubble.innerHTML = '<span class="voice-failed">语音识别失败，请重试</span>';
+            setMicTip('语音识别失败：' + e.message + '（请确认查询服务 8001 已启动）', true);
+            el.micBtn.textContent = '🎤';
+            el.micBtn.disabled = false;
+            return;
+        }
+
+        if (text.length < 2) {
+            userBubble.innerHTML = '<span class="voice-failed">没听清，请靠近麦克风再说一次</span>';
+            setMicTip('没有识别到有效语音，请重试。', true);
+            el.micBtn.textContent = '🎤';
+            el.micBtn.disabled = false;
+            return;
+        }
+
+        // ② 识别成功：占位点变成文字，立即进入检索
+        //    send() 会复用这个气泡，不会再插一条用户消息
+        //    输入框里如果已经打了字，一起带上，避免丢内容
+        const typed = el.input.value.trim();
+        el.micBtn.textContent = '🎤';
+        send(typed ? typed + ' ' + text : text, userBubble);
+    }
+
+    el.micBtn.onclick = () => {
+        if (recording) stopRecording();
+        else startRecording();
+    };
 
     // ============================ 历史恢复 ============================
     async function loadHistory() {

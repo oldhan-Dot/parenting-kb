@@ -13,8 +13,6 @@ from app.core.logger import node_log, logger
 from app.import_process.agent.state import ImportGraphState
 from app.utils.task_utils import add_running_task, add_done_task
 
-SUPPORTED_SUFFIXES = (".pdf", ".md")
-
 
 @node_log("node_entry")
 def node_entry(state: ImportGraphState) -> ImportGraphState:

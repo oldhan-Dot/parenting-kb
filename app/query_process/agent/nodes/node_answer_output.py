@@ -112,8 +112,10 @@ def node_answer_output(state: QueryGraphState):
     is_stream = state["is_stream"]
     add_running_task(session_id, "node_answer_output", is_stream)
 
-    # 情况一：上游已经给出了答案（例如空问题提示），直接输出
+    # 情况一：上游已经给出了答案（空问题提示 / 寒暄引导语），直接输出
     if state.get("answer"):
+        set_task_result(session_id, "answer", state["answer"])
+        _save_assistant_message(session_id, state["answer"], state.get("filters"))
         _push_final(session_id, state["answer"], is_stream)
         add_done_task(session_id, "node_answer_output", is_stream)
         return state

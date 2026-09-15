@@ -15,4 +15,7 @@ wheels/
 # 运行时产物
 logs/
 output/
+
+# IDE 配置
 .idea/
+.vscode/

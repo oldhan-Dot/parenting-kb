@@ -27,6 +27,8 @@ dependencies = [
     "torch>=2.2.0",
     "transformers>=4.40.0",
     "modelscope>=1.15.0",
+    "funasr>=1.4.15",
+    "kaldi-native-fbank>=1.22.3",
 ]
 
 [tool.hatch.build.targets.wheel]

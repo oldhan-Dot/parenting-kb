@@ -4,24 +4,28 @@
 接口：
 - GET    /chat.html            对话页面
 - POST   /query                提问（流式 / 非流式）
+- POST   /asr                  语音转文字（语音交互）
 - GET    /stream/{session_id}  流式输出（SSE）
 - GET    /history/{session_id} 查询历史对话
 - DELETE /delete/{session_id}  清空会话历史
 - GET    /health               健康检查
 """
+import shutil
 import uuid
 from pathlib import Path
 
 import uvicorn
-from fastapi import FastAPI, BackgroundTasks, HTTPException
+from fastapi import BackgroundTasks, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel, Field
 from starlette.middleware.cors import CORSMiddleware
 
 from app.clients.mongo_history_utils import clear_history, get_recent_messages
 from app.core.logger import logger
+from app.lm.ars_utils import transcribe
 from app.query_process.agent.main_graph import kb_query_app
 from app.query_process.agent.state import create_query_default_state
+from app.utils.path_util import PROJECT_ROOT
 from app.utils.sse_utils import SSEEvent, create_sse_queue, push_to_session, sse_generator
 from app.utils.task_utils import (
     TASK_STATUS_COMPLETED,
@@ -107,8 +111,32 @@ async def query(background_task: BackgroundTasks, request: QueryRequest):
     }
 
 
+@app.post("/asr")
+async def speech_to_text(file: UploadFile = File(...)):
+    """语音转文字：接收音频文件，返回识别文字"""
+    # 保留原扩展名：解码后端会按后缀/容器格式判断（前端录的是 .wav）
+    suffix = Path(file.filename or "").suffix or ".wav"
+    tmp_path = PROJECT_ROOT / "output" / f"asr_{uuid.uuid4().hex}{suffix}"
+    tmp_path.parent.mkdir(parents=True, exist_ok=True)
+
+    try:
+        with tmp_path.open("wb") as f:
+            shutil.copyfileobj(file.file, f)
+        if tmp_path.stat().st_size == 0:
+            raise ValueError("上传的音频文件为空")
+        text = transcribe(str(tmp_path))
+    except Exception as e:
+        logger.error(f"语音识别失败：{e}")
+        raise HTTPException(status_code=500, detail=f"语音识别失败：{e}")
+    finally:
+        # 音频不落盘，识别完立即删除（语音涉及隐私）
+        tmp_path.unlink(missing_ok=True)
+
+    return {"text": text}
+
+
 @app.get("/stream/{session_id}")
-async def stream(session_id: str, request):
+async def stream(session_id: str, request: Request):
     """SSE 流式输出"""
     return StreamingResponse(
         sse_generator(session_id, request),
